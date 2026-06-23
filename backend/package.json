@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
+  "engines": {
+    "node": ">=22.0.0 <23",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "nest start --watch",
     "dev:local": "npm run prisma:generate && npm run prisma:push && nest start --watch",
     "start": "node dist/main.js",
     "start:local": "npm run prisma:generate && npm run prisma:push && node dist/main.js",
-    "start:prod": "npm run prisma:generate && npm run prisma:migrate && node dist/main.js",
+    "start:prod": "npm run prisma:generate && npm run prisma:push && node dist/main.js",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
