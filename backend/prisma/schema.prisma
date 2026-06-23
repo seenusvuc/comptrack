@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppUser {
+  id           String    @id @default(uuid())
+  authSubject  String    @unique @map("auth_subject")
+  employeeCode String?   @unique @map("employee_code")
+  email        String    @unique
+  fullName     String    @map("full_name")
+  passwordHash String    @map("password_hash")
+  department   String?
+  team         String?
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  userRoles         UserRole[]
+  overtimeEntries  OvertimeEntry[]
+  compOffRequests  CompOffRequest[]
+  ledgerEntries    CompOffLedger[]  @relation("ledger_employee")
+
+  employeeMappings EmployeeManagerMap[] @relation("manager_for")
+  managerMappings  EmployeeManagerMap[] @relation("employee_for")
+
+  @@map("app_user")
+}
+
+model AppRole {
+  id       Int        @id @default(autoincrement())
+  roleCode String     @unique @map("role_code")
+  roleName String     @map("role_name")
+  userRoles UserRole[]
+
+  @@map("app_role")
+}
+
+model UserRole {
+  userId    String   @map("user_id")
+  roleId    Int      @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role AppRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@map("user_role")
+}
+
+model EmployeeManagerMap {
+  id            String    @id @default(uuid())
+  employeeId    String    @map("employee_id")
+  managerId     String    @map("manager_id")
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  employee AppUser @relation("employee_for", fields: [employeeId], references: [id], onDelete: Cascade)
+  manager  AppUser @relation("manager_for", fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "ix_employee_manager_employee")
+  @@map("employee_manager_map")
+}
+
+model PolicySettings {
+  id                   Int      @id @default(1)
+  conversionRatio      Float    @default(1.0) @map("conversion_ratio")
+  minUnitHours         Float    @default(0.5) @map("min_unit_hours")
+  maxCarryForwardHours Float    @default(160.0) @map("max_carry_forward_hours")
+  expiryDays           Int      @default(180) @map("expiry_days")
+  allowNegativeBalance Boolean  @default(false) @map("allow_negative_balance")
+  timezoneName         String   @default("UTC") @map("timezone_name")
+  createdBy            String?  @map("created_by")
+  updatedBy            String?  @map("updated_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @map("updated_at")
+
+  @@map("policy_settings")
+}
+
+model OvertimeEntry {
+  id            String    @id @default(uuid())
+  employeeId    String    @map("employee_id")
+  workDate      DateTime  @map("work_date")
+  startTime     DateTime? @map("start_time")
+  endTime       DateTime? @map("end_time")
+  overtimeHours Float     @map("overtime_hours")
+  reason        String
+  projectCode   String?   @map("project_code")
+  status        String
+  submittedAt   DateTime? @map("submitted_at")
+  approvedAt    DateTime? @map("approved_at")
+  rejectedAt    DateTime? @map("rejected_at")
+  cancelledAt   DateTime? @map("cancelled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @map("updated_at")
+
+  employee AppUser            @relation(fields: [employeeId], references: [id])
+  approval OvertimeApproval?
+
+  @@index([employeeId, status], map: "ix_overtime_employee_status")
+  @@map("overtime_entries")
+}
+
+model OvertimeApproval {
+  id              String   @id @default(uuid())
+  overtimeEntryId String   @unique @map("overtime_entry_id")
+  managerId       String   @map("manager_id")
+  action          String
+  comment         String?
+  actionAt        DateTime @default(now()) @map("action_at")
+
+  overtimeEntry OvertimeEntry @relation(fields: [overtimeEntryId], references: [id], onDelete: Cascade)
+
+  @@map("overtime_approvals")
+}
+
+model CompOffRequest {
+  id             String    @id @default(uuid())
+  employeeId     String    @map("employee_id")
+  requestDate    DateTime  @map("request_date")
+  requestedHours Float     @map("requested_hours")
+  reason         String
+  status         String
+  submittedAt    DateTime  @default(now()) @map("submitted_at")
+  approvedAt     DateTime? @map("approved_at")
+  rejectedAt     DateTime? @map("rejected_at")
+  cancelledAt    DateTime? @map("cancelled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+
+  employee AppUser           @relation(fields: [employeeId], references: [id])
+  approval CompOffApproval?
+
+  @@index([employeeId, status], map: "ix_compoff_employee_status")
+  @@map("compoff_requests")
+}
+
+model CompOffApproval {
+  id               String   @id @default(uuid())
+  compoffRequestId String   @unique @map("compoff_request_id")
+  managerId        String   @map("manager_id")
+  action           String
+  comment          String?
+  actionAt         DateTime @default(now()) @map("action_at")
+
+  compoffRequest CompOffRequest @relation(fields: [compoffRequestId], references: [id], onDelete: Cascade)
+
+  @@map("compoff_approvals")
+}
+
+model CompOffLedger {
+  id         String    @id @default(uuid())
+  employeeId String    @map("employee_id")
+  entryType  String    @map("entry_type")
+  sourceType String    @map("source_type")
+  sourceId   String?   @map("source_id")
+  hours      Float
+  expiresAt  DateTime? @map("expires_at")
+  note       String?
+  createdBy  String?   @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  employee AppUser @relation("ledger_employee", fields: [employeeId], references: [id])
+
+  @@index([employeeId, createdAt], map: "ix_ledger_employee_created")
+  @@map("compoff_ledger")
+}

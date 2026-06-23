@@ -1,0 +1,852 @@
+openapi: 3.0.3
+info:
+  title: CompTrack API
+  version: 1.0.0
+  description: |
+    REST API for overtime and comp-off management.
+    Authentication is handled by local database-backed login. API expects Bearer JWT access tokens.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Overtime
+  - name: CompOff
+  - name: Approvals
+  - name: Balance
+  - name: Policy
+  - name: Users
+paths:
+  /auth/bootstrap-admin:
+    post:
+      tags: [Auth]
+      summary: Create the initial super admin account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Bootstrap admin created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new employee account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Employee registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile and roles
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: Requires hr_admin or super_admin role.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsers'
+  /users/{userId}/manager:
+    put:
+      tags: [Users]
+      summary: Assign or update employee manager
+      description: Requires super_admin.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [managerId, effectiveFrom]
+              properties:
+                managerId:
+                  type: string
+                  format: uuid
+                effectiveFrom:
+                  type: string
+                  format: date
+                effectiveTo:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Mapping updated
+  /users/{userId}/roles:
+    put:
+      tags: [Users]
+      summary: Replace user roles
+      description: Requires super_admin.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items:
+                    type: string
+                    enum: [employee, manager, hr_admin, super_admin]
+      responses:
+        '200':
+          description: Roles updated
+  /overtime-entries:
+    get:
+      tags: [Overtime]
+      summary: List overtime entries
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/OvertimeStatus'
+        - in: query
+          name: employeeId
+          schema:
+            type: string
+            format: uuid
+          description: For manager/hr_admin/super_admin scope.
+      responses:
+        '200':
+          description: Paginated overtime entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOvertimeEntries'
+    post:
+      tags: [Overtime]
+      summary: Create overtime entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOvertimeEntryRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEntry'
+  /overtime-entries/{entryId}:
+    get:
+      tags: [Overtime]
+      summary: Get overtime entry by id
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Overtime entry detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEntry'
+    patch:
+      tags: [Overtime]
+      summary: Update draft overtime entry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOvertimeEntryRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEntry'
+  /overtime-entries/{entryId}/submit:
+    post:
+      tags: [Overtime]
+      summary: Submit draft overtime entry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Submitted
+  /overtime-entries/{entryId}/cancel:
+    post:
+      tags: [Overtime]
+      summary: Cancel overtime entry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Cancelled
+  /approvals/overtime/{entryId}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve overtime entry
+      description: Requires manager role, employee must be direct report.
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCommentRequest'
+      responses:
+        '200':
+          description: Approved and ledger credit created
+  /approvals/overtime/{entryId}/reject:
+    post:
+      tags: [Approvals]
+      summary: Reject overtime entry
+      description: Requires manager role, employee must be direct report.
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCommentRequest'
+      responses:
+        '200':
+          description: Rejected
+  /compoff-requests:
+    get:
+      tags: [CompOff]
+      summary: List comp-off requests
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/CompOffStatus'
+        - in: query
+          name: employeeId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated comp-off requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCompOffRequests'
+    post:
+      tags: [CompOff]
+      summary: Create comp-off request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompOffRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompOffRequest'
+  /compoff-requests/{requestId}:
+    get:
+      tags: [CompOff]
+      summary: Get comp-off request by id
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Comp-off request detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompOffRequest'
+  /compoff-requests/{requestId}/cancel:
+    post:
+      tags: [CompOff]
+      summary: Cancel comp-off request
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Cancelled
+  /approvals/compoff/{requestId}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve comp-off request
+      description: Requires manager role, employee must be direct report.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCommentRequest'
+      responses:
+        '200':
+          description: Approved and ledger debit created
+  /approvals/compoff/{requestId}/reject:
+    post:
+      tags: [Approvals]
+      summary: Reject comp-off request
+      description: Requires manager role, employee must be direct report.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCommentRequest'
+      responses:
+        '200':
+          description: Rejected
+  /balances/me:
+    get:
+      tags: [Balance]
+      summary: Get current user comp-off balance
+      responses:
+        '200':
+          description: Current balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceSummary'
+  /balances/me/ledger:
+    get:
+      tags: [Balance]
+      summary: Get current user ledger entries
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLedgerEntries'
+  /balances/team:
+    get:
+      tags: [Balance]
+      summary: Team balance summary for managers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Team balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamBalance'
+  /policy:
+    get:
+      tags: [Policy]
+      summary: Get active comp-off policy
+      responses:
+        '200':
+          description: Policy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicySettings'
+    put:
+      tags: [Policy]
+      summary: Update active comp-off policy
+      description: Requires hr_admin or super_admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePolicyRequest'
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicySettings'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Local JWT access token
+  parameters:
+    Page:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      in: query
+      name: pageSize
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Sort:
+      in: query
+      name: sort
+      schema:
+        type: string
+        example: createdAt:desc
+    UserId:
+      in: path
+      name: userId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntryId:
+      in: path
+      name: entryId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RequestId:
+      in: path
+      name: requestId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+          example: COMPTRACK_FORBIDDEN
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+    UserProfile:
+      type: object
+      required: [id, email, fullName, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        authSubject:
+          type: string
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [employee, manager, hr_admin, super_admin]
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        fullName:
+          type: string
+        employeeCode:
+          type: string
+        department:
+          type: string
+        team:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserProfile'
+    OvertimeStatus:
+      type: string
+      enum: [draft, submitted, approved, rejected, cancelled]
+    CompOffStatus:
+      type: string
+      enum: [submitted, approved, rejected, cancelled]
+    OvertimeEntry:
+      type: object
+      required: [id, employeeId, workDate, overtimeHours, status, reason]
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        workDate:
+          type: string
+          format: date
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        overtimeHours:
+          type: number
+          format: float
+          minimum: 0.5
+        reason:
+          type: string
+        projectCode:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OvertimeStatus'
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateOvertimeEntryRequest:
+      type: object
+      required: [workDate, overtimeHours, reason]
+      properties:
+        workDate:
+          type: string
+          format: date
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        overtimeHours:
+          type: number
+          format: float
+          minimum: 0.5
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        projectCode:
+          type: string
+          maxLength: 120
+    UpdateOvertimeEntryRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateOvertimeEntryRequest'
+    CompOffRequest:
+      type: object
+      required: [id, employeeId, requestDate, requestedHours, status, reason]
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        requestDate:
+          type: string
+          format: date
+        requestedHours:
+          type: number
+          format: float
+          minimum: 0.5
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/CompOffStatus'
+        submittedAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateCompOffRequest:
+      type: object
+      required: [requestDate, requestedHours, reason]
+      properties:
+        requestDate:
+          type: string
+          format: date
+        requestedHours:
+          type: number
+          format: float
+          minimum: 0.5
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 2000
+    ApprovalCommentRequest:
+      type: object
+      properties:
+        comment:
+          type: string
+          maxLength: 1000
+    PolicySettings:
+      type: object
+      required:
+        [conversionRatio, minUnitHours, maxCarryForwardHours, expiryDays, allowNegativeBalance, timezoneName]
+      properties:
+        conversionRatio:
+          type: number
+          format: float
+        minUnitHours:
+          type: number
+          format: float
+        maxCarryForwardHours:
+          type: number
+          format: float
+        expiryDays:
+          type: integer
+          minimum: 1
+        allowNegativeBalance:
+          type: boolean
+        timezoneName:
+          type: string
+          example: Asia/Kolkata
+    UpdatePolicyRequest:
+      $ref: '#/components/schemas/PolicySettings'
+    LedgerEntry:
+      type: object
+      required: [id, employeeId, entryType, sourceType, hours, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        entryType:
+          type: string
+          enum: [credit, debit]
+        sourceType:
+          type: string
+          enum: [overtime_approval, compoff_approval, manual_adjustment, expiry]
+        sourceId:
+          type: string
+          format: uuid
+          nullable: true
+        hours:
+          type: number
+          format: float
+        expiresAt:
+          type: string
+          format: date
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    BalanceSummary:
+      type: object
+      required: [availableHours, creditedHours, debitedHours]
+      properties:
+        availableHours:
+          type: number
+          format: float
+        creditedHours:
+          type: number
+          format: float
+        debitedHours:
+          type: number
+          format: float
+    TeamBalance:
+      type: object
+      properties:
+        employeeId:
+          type: string
+          format: uuid
+        employeeName:
+          type: string
+        availableHours:
+          type: number
+          format: float
+        pendingOvertimeHours:
+          type: number
+          format: float
+        pendingCompOffHours:
+          type: number
+          format: float
+    PaginatedMeta:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+    PaginatedUsers:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'
+    PaginatedOvertimeEntries:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OvertimeEntry'
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'
+    PaginatedCompOffRequests:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompOffRequest'
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'
+    PaginatedLedgerEntries:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'
+    PaginatedTeamBalance:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamBalance'
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'

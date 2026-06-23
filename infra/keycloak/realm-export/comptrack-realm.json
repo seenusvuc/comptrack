@@ -1,0 +1,105 @@
+{
+  "realm": "comptrack",
+  "enabled": true,
+  "displayName": "CompTrack",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "employee" },
+      { "name": "manager" },
+      { "name": "hr_admin" },
+      { "name": "super_admin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "comptrack-web",
+      "name": "CompTrack Web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ]
+    },
+    {
+      "clientId": "comptrack-api",
+      "name": "CompTrack API",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "replace-with-secure-secret"
+    }
+  ],
+  "users": [
+    {
+      "username": "employee1",
+      "enabled": true,
+      "email": "employee1@example.com",
+      "firstName": "Employee",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["employee"]
+    },
+    {
+      "username": "manager1",
+      "enabled": true,
+      "email": "manager1@example.com",
+      "firstName": "Manager",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["manager"]
+    },
+    {
+      "username": "hr1",
+      "enabled": true,
+      "email": "hr1@example.com",
+      "firstName": "HR",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["hr_admin"]
+    },
+    {
+      "username": "superadmin",
+      "enabled": true,
+      "email": "superadmin@example.com",
+      "firstName": "Super",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["super_admin"]
+    }
+  ]
+}
